@@ -1,5 +1,8 @@
 # ReceiptSorter
 
+<img width="2000" height="840" alt="cover" src="https://github.com/user-attachments/assets/75c2229f-f540-463f-9ecc-c0bcc865abd0" />
+
+
 Sort freelancer receipts and invoices into a clean CSV and category folders, **entirely on your own machine**.
 A local open-weight model (via [Ollama](https://ollama.com)) reads each receipt and extracts vendor, date, total, currency and expense category. No cloud API, no client data leaving your laptop.
 
