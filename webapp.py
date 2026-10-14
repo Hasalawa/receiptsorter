@@ -40,35 +40,18 @@ def ollama_status(host: str) -> dict:
         return {"online": False, "models": []}
 
 
-def extract(name: str, data: bytes, host: str, model: str, use_llm: bool) -> dict:
+def extract(name: str, data: bytes, host: str, model: str, vision_model: str, use_llm: bool) -> dict:
     suffix = Path(name).suffix.lower()
     with tempfile.TemporaryDirectory() as td:
         path = Path(td) / f"upload{suffix}"
         path.write_bytes(data)
-        text = rs.read_text(path)
-    if not text.strip():
-        return {"error": "No readable text. PDFs need poppler (pdftotext), photos need tesseract."}
-
-    fields, source, note = None, "rules", ""
-    if use_llm:
-        try:
-            fields, source = rs.ask_llm(text, host, model), model
-        except Exception as e:
-            note = f"Model unavailable ({e.__class__.__name__}); used basic rules."
-    if fields is None:
-        fields = rs.fallback_extract(text)
-    if fields.get("category") not in rs.CATEGORIES:
-        fields["category"] = "Other"
-    try:
-        fields["total"] = round(float(fields.get("total") or 0), 2)
-    except (TypeError, ValueError):
-        fields["total"] = 0.0
-
+        result = rs.extract_document(path, host, model, vision_model, use_llm)
+    if "error" in result:
+        return {"error": result["error"]}
     uid = uuid.uuid4().hex[:10]
     with STORE_LOCK:
         STORE[uid] = {"name": name, "data": data}
-    return {"id": uid, "file": name, "source": source, "note": note,
-            **{k: fields.get(k, "") for k in ("vendor", "date", "total", "currency", "category")}}
+    return {"id": uid, "file": name, "source": result["source"], "note": result["note"], **result["fields"]}
 
 
 def build_zip(rows: list) -> bytes:
@@ -98,7 +81,8 @@ def build_zip(rows: list) -> bytes:
     return buf.getvalue()
 
 
-def make_server(port: int, ollama_host: str, model: str) -> ThreadingHTTPServer:
+def make_server(port: int, ollama_host: str, model: str,
+                vision_model: str = rs.DEFAULT_VISION_MODEL) -> ThreadingHTTPServer:
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
 
     class Handler(BaseHTTPRequestHandler):
@@ -150,7 +134,8 @@ def make_server(port: int, ollama_host: str, model: str) -> ThreadingHTTPServer:
                 self._send(204, b"", "image/x-icon")
             elif path == "/api/status":
                 st = ollama_status(ollama_host)
-                self._json({**st, "default_model": model, "categories": rs.CATEGORIES})
+                self._json({**st, "default_model": model, "default_vision_model": vision_model,
+                            "categories": rs.CATEGORIES})
             elif path == "/api/samples":
                 items = [{"name": p.name, "text": p.read_text()} for p in sorted(SAMPLES.glob("*.txt"))]
                 self._json(items)
@@ -168,8 +153,9 @@ def make_server(port: int, ollama_host: str, model: str) -> ThreadingHTTPServer:
                 name = urllib.parse.unquote(self.headers.get("X-Filename", "receipt.txt"))
                 name = re.sub(r"[\\/]", "_", name)[:120]
                 chosen = urllib.parse.unquote(self.headers.get("X-Model", "")) or model
+                chosen_vision = urllib.parse.unquote(self.headers.get("X-Vision-Model", "")) or vision_model
                 use_llm = self.headers.get("X-Use-Llm", "1") == "1"
-                self._json(extract(name, data, ollama_host, chosen, use_llm))
+                self._json(extract(name, data, ollama_host, chosen, chosen_vision, use_llm))
             elif parsed.path == "/api/zip":
                 data = self._body()
                 if data is None:
@@ -195,10 +181,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--ollama", default="http://localhost:11434", help="Ollama URL")
-    ap.add_argument("--model", default="qwen2.5:7b-instruct")
+    ap.add_argument("--model", default=rs.DEFAULT_MODEL, help="text model for txt/pdf receipts")
+    ap.add_argument("--vision-model", default=rs.DEFAULT_VISION_MODEL, help="vision model for photos")
     ap.add_argument("--no-open", action="store_true", help="don't open the browser")
     a = ap.parse_args()
-    srv = make_server(a.port, a.ollama, a.model)
+    srv = make_server(a.port, a.ollama, a.model, a.vision_model)
     url = f"http://127.0.0.1:{a.port}"
     print(f"ReceiptSorter is running at {url}  (Ctrl+C to stop)")
     if not a.no_open:
