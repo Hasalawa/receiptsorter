@@ -13,6 +13,16 @@ Opens `http://127.0.0.1:8765` in your browser. Drag receipts in (or click **Try 
 
 ![ReceiptSorter web UI](docs/screenshot.png)
 
+## Photos of receipts
+
+Phone photos are read by a local **vision model**, so you don't need OCR software. Install one once:
+
+```bash
+ollama pull qwen2.5vl:7b
+```
+
+Photos can take up to a minute each on a laptop without a GPU. If no vision model is installed, the app falls back to Tesseract OCR when it is available (`pip install pytesseract pillow` plus the `tesseract` program), and otherwise tells you exactly what to install. If no currency is printed on a receipt, `LKR` is assumed (change `DEFAULT_CURRENCY` in `receiptsorter.py`).
+
 ## Command line
 
 ```bash
@@ -29,7 +39,8 @@ Output: `sorted/receipts.csv`, category folders with renamed copies (`2026-10-01
 
 | Flag | Meaning |
 |------|---------|
-| `--model` | Any Ollama model (default `qwen2.5:7b-instruct`). Swap freely. |
+| `--model` | Text model for txt/pdf receipts (default `qwen2.5:7b-instruct`). Swap freely. |
+| `--vision-model` | Vision model for photos (default `qwen2.5vl:7b`) |
 | `--host` | Ollama URL (default `http://localhost:11434`) |
 | `--no-llm` | Regex-only mode, no model needed |
 | `--move-files` | Copy originals into category folders |
