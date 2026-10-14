@@ -16,6 +16,10 @@ tags: devchallenge, hf26challenge
 
 ## Demo
 
+There is a local web app too (`python3 webapp.py`): drag receipts in, fix anything the model got wrong, and download a CSV or a ZIP sorted into category folders. It only listens on 127.0.0.1 and has no external assets, so it works offline.
+
+<!-- Add docs/screenshot.png (upload it to the dev.to editor) or a short screen recording here -->
+
 <!-- Add a short screen recording or a deployed link here -->
 
 ```
@@ -42,7 +46,8 @@ Wrote sorted/receipts.csv (4 receipts)
 - **Temperature 0** for repeatable results.
 - **Text extraction:** plain text directly, PDFs via `pdftotext`, photos via Tesseract OCR.
 - **Graceful fallback:** if Ollama isn't running, a regex extractor takes over, so the tool never leaves the user with nothing.
-- **Pure standard library core:** one Python file, no dependency hell for a non-technical customer.
+- **Pure standard library core:** a CLI plus a small web UI (`webapp.py` and one HTML file, no frameworks, no CDN), so there is no dependency hell for a non-technical customer.
+- **Web UI safety:** the server binds to 127.0.0.1 and rejects requests with a foreign Host or Origin header, so a random website can't talk to it.
 - I tested all three paths (regex, LLM, LLM-unreachable fallback) with sample receipts and a mock Ollama server.
 
 ## Why Does Open Innovation Matter?

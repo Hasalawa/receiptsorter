@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReceiptSorter</title>
+<style>
+:root {
+  --paper: #e9ecee;
+  --surface: #f8f9f9;
+  --ink: #18221f;
+  --muted: #5c6a66;
+  --line: #cfd6d3;
+  --ledger: #0e5a49;
+  --ledger-ink: #ffffff;
+  --stamp: #b4372c;
+  --tape: #fdfcf6;
+  --tape-ink: #26302c;
+  --serif: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121816; --surface: #1a2220; --ink: #e6ece9; --muted: #93a29d; --line: #2e3a37;
+    --ledger: #4fb89c; --ledger-ink: #08231c; --stamp: #ee7d70;
+    --tape: #ece8d8; --tape-ink: #1e2622;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--ledger); outline-offset: 2px; }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 28px 16px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+h1 { font: 600 clamp(28px, 4.6vw, 44px)/1.05 var(--serif); letter-spacing: -0.01em; margin: 0 0 6px; }
+.sub { margin: 0; color: var(--muted); max-width: 52ch; }
+.status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 14px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--stamp); flex: none; }
+.status.ok .dot { background: var(--ledger); }
+.status button { border: 0; background: none; padding: 0; text-decoration: underline; cursor: pointer; color: var(--muted); }
+
+.layout { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+.drop { display: block; position: relative; border: 2px dashed var(--ledger); border-radius: 6px; padding: 28px 20px; text-align: center; cursor: pointer; background: var(--surface); transition: background .15s, border-color .15s; }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.drop:focus-within { outline: 3px solid var(--ledger); outline-offset: 2px; }
+.drop.over { background: color-mix(in srgb, var(--ledger) 12%, var(--surface)); border-style: solid; }
+.drop strong { display: block; font: 600 20px/1.2 var(--serif); margin-bottom: 4px; }
+.drop span { color: var(--muted); font-size: 14px; }
+.btn { border: 1px solid var(--ledger); background: var(--ledger); color: var(--ledger-ink); padding: 9px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.btn:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; color: var(--ledger); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; filter: none; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.opts { margin-top: 16px; display: grid; gap: 10px; font-size: 14px; }
+.opts label { display: flex; align-items: center; gap: 8px; }
+.opts select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.privacy { margin-top: 16px; font-size: 14px; color: var(--muted); border-left: 3px solid var(--ledger); padding-left: 12px; }
+
+.progress { margin-top: 12px; font-size: 14px; color: var(--muted); min-height: 21px; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+.bar i { display: block; height: 100%; width: 0; background: var(--ledger); transition: width .2s; }
+
+/* the tape: category totals printed like a till receipt */
+.tape { margin-top: 24px; background: var(--tape); color: var(--tape-ink); font: 14px/1.7 var(--mono); padding: 18px 18px 30px;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+          mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%; }
+.tape h2 { font: 700 14px/1.4 var(--mono); margin: 0 0 8px; text-align: center; }
+.tape .cur { margin-top: 10px; font-weight: 700; }
+.tape .line { display: flex; gap: 6px; align-items: baseline; }
+.tape .line .lead { flex: 1; border-bottom: 1px dotted currentColor; opacity: .45; transform: translateY(-4px); }
+.tape .sum { border-top: 1px solid currentColor; margin-top: 4px; padding-top: 2px; font-weight: 700; }
+.tape .empty { text-align: center; opacity: .6; }
+
+.results { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.results-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.results-head h2 { margin: 0; font: 600 20px/1.2 var(--serif); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; }
+th { text-align: left; font-weight: 600; font-size: 13px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td input, td select { width: 100%; border: 1px solid transparent; background: transparent; padding: 6px 6px; border-radius: 4px; }
+td input:hover, td select:hover { border-color: var(--line); }
+td input:focus, td select:focus { border-color: var(--ledger); background: var(--paper); }
+td.v { min-width: 170px; } td.d { min-width: 112px; } td.c { min-width: 128px; } td.cu { width: 64px; } td.num { min-width: 104px; }
+td.num input { text-align: right; font-variant-numeric: tabular-nums; }
+.file { font-size: 13px; color: var(--muted); max-width: 104px; padding-left: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.src.ai { border-color: var(--ledger); color: var(--ledger); }
+.x { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 8px; border-radius: 4px; }
+.x:hover { color: var(--stamp); }
+.err td { color: var(--stamp); font-size: 14px; }
+.hint { padding: 36px 20px; text-align: center; color: var(--muted); }
+.hint strong { display: block; font: 600 20px/1.3 var(--serif); color: var(--ink); margin-bottom: 4px; }
+.note { font-size: 13px; color: var(--muted); padding: 8px 16px; border-top: 1px solid var(--line); }
+@media (max-width: 700px) {
+  table { min-width: 0; }
+  thead { display: none; }
+  tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; padding: 12px; border-bottom: 1px solid var(--line); position: relative; }
+  tr:last-child { border-bottom: 0; }
+  td { display: block; padding: 0; border: 0; }
+  td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); padding-left: 6px; }
+  td.file { grid-column: 1 / -1; max-width: none; padding-left: 0; }
+  td.v { grid-column: 1 / -1; min-width: 0; }
+  td.d, td.c, td.num { min-width: 0; }
+  td.cu { width: auto; }
+  td.x-cell { position: absolute; top: 4px; right: 4px; }
+  td.src-cell { grid-column: 1 / -1; }
+  .err td[colspan] { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>Receipts in, expense sheet out.</h1>
+      <p class="sub">Drop your receipts and invoices. A model on this computer reads each one, sorts it into a category and builds your CSV.</p>
+    </div>
+    <div class="status" id="status" role="status"><span class="dot"></span><span id="statusText">Checking for a local model…</span><button id="recheck" type="button">Check again</button></div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <label class="drop" id="drop">
+        <input type="file" id="file" multiple accept=".txt,.pdf,.png,.jpg,.jpeg,.webp">
+        <strong>Add receipts</strong>
+        <span>Drag files here or click to choose.<br>Text, PDF, PNG, JPG.</span>
+      </label>
+      <div class="row-actions">
+        <button class="btn ghost" id="sample" type="button">Try sample receipts</button>
+      </div>
+      <div class="progress" id="progress" aria-live="polite"></div>
+
+      <div class="opts">
+        <label><input type="checkbox" id="useAi" checked> Read with the AI model</label>
+        <label>Model <select id="model"></select></label>
+      </div>
+      <p class="privacy">Everything stays on this computer. Nothing is uploaded, and it works without internet.</p>
+
+      <div class="tape" id="tape"></div>
+    </aside>
+
+    <main class="results">
+      <div class="results-head">
+        <h2>Sorted receipts</h2>
+        <div class="row-actions" style="margin:0">
+          <button class="btn" id="csv" type="button" disabled>Download CSV</button>
+          <button class="btn ghost" id="zip" type="button" disabled>Download sorted ZIP</button>
+          <button class="btn ghost" id="clear" type="button" disabled>Clear all</button>
+        </div>
+      </div>
+      <div id="hint" class="hint"><strong>No receipts yet</strong>Add some on the left, or try the sample receipts.</div>
+      <div class="scroll" id="tableWrap" hidden>
+        <table>
+          <thead><tr><th>File</th><th>Vendor</th><th>Date</th><th style="text-align:right">Total</th><th>Cur.</th><th>Category</th><th>Read by</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="note" id="note" hidden>Fix anything the model got wrong: every cell is editable, and the totals and downloads update.</div>
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var CATS = ["Software","Travel","Meals","Office","Hardware","Utilities","Marketing","Other"];
+  var rows = [], online = false, defaultModel = "";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function fmt(n) { return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+  /* ---------- status ---------- */
+  function checkStatus() {
+    return fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
+      online = s.online; CATS = s.categories || CATS; defaultModel = s.default_model;
+      var box = $("status");
+      box.className = "status" + (online ? " ok" : "");
+      var sel = $("model"); sel.innerHTML = "";
+      var names = s.models.slice();
+      if (names.indexOf(defaultModel) < 0) names.unshift(defaultModel);
+      names.forEach(function (m) { var o = document.createElement("option"); o.value = o.textContent = m; sel.appendChild(o); });
+      if (online) {
+        var have = s.models.indexOf(defaultModel) >= 0;
+        $("statusText").textContent = have ? "Local model ready" : "Ollama is running, but " + defaultModel + " isn't installed";
+        if (!have && s.models.length) sel.value = s.models[0];
+      } else {
+        $("statusText").textContent = "Ollama isn't running. Using basic rules instead.";
+      }
+      $("useAi").disabled = !online;
+      if (!online) $("useAi").checked = false;
+    }).catch(function () { $("statusText").textContent = "Can't reach the app server."; });
+  }
+
+  /* ---------- processing ---------- */
+  function processFiles(files) {
+    files = Array.prototype.slice.call(files);
+    if (!files.length) return;
+    var done = 0, bar = document.createElement("div");
+    bar.className = "bar"; bar.innerHTML = "<i></i>";
+    var p = $("progress");
+    function step() {
+      if (done >= files.length) { p.textContent = "Done. " + files.length + (files.length === 1 ? " file" : " files") + " sorted."; return; }
+      p.textContent = "Reading " + (done + 1) + " of " + files.length + ": " + files[done].name;
+      p.appendChild(bar); bar.firstChild.style.width = (done / files.length * 100) + "%";
+      var f = files[done];
+      fetch("/api/extract", {
+        method: "POST",
+        headers: { "X-Filename": encodeURIComponent(f.name), "X-Model": encodeURIComponent($("model").value), "X-Use-Llm": $("useAi").checked ? "1" : "0" },
+        body: f
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.error) d = { error: d.error, file: f.name, id: "e" + Math.random().toString(36).slice(2) };
+        rows.push(d);
+      }).catch(function () {
+        rows.push({ error: "Couldn't read this file.", file: f.name, id: "e" + Math.random().toString(36).slice(2) });
+      }).then(function () { done++; renderTable(); step(); });
+    }
+    step();
+  }
+
+  /* ---------- rendering ---------- */
+  function cell(tr, cls, label) { var td = document.createElement("td"); if (cls) td.className = cls; if (label) td.setAttribute("data-label", label); tr.appendChild(td); return td; }
+  function input(td, row, key, type) {
+    var i = document.createElement("input"); i.type = type || "text"; i.value = row[key] == null ? "" : row[key];
+    if (type === "number") i.step = "0.01";
+    i.setAttribute("aria-label", key + " for " + row.file);
+    i.addEventListener("input", function () { row[key] = type === "number" ? parseFloat(i.value) || 0 : i.value; renderTape(); });
+    td.appendChild(i); return i;
+  }
+
+  function renderTable() {
+    var tb = $("rows"); tb.innerHTML = "";
+    rows.forEach(function (row) {
+      var tr = document.createElement("tr");
+      if (row.error) {
+        tr.className = "err";
+        var a = cell(tr); a.className = "file"; a.textContent = row.file; a.title = row.file;
+        var b = cell(tr); b.colSpan = 6; b.textContent = row.error;
+      } else {
+        var f = cell(tr, "file"); f.textContent = row.file; f.title = row.file + (row.note ? " (" + row.note + ")" : "");
+        input(cell(tr, "v", "Vendor"), row, "vendor");
+        input(cell(tr, "d", "Date"), row, "date");
+        input(cell(tr, "num", "Total"), row, "total", "number");
+        input(cell(tr, "cu", "Currency"), row, "currency");
+        var cs = cell(tr, "c", "Category"), sel = document.createElement("select");
+        sel.setAttribute("aria-label", "Category for " + row.file);
+        CATS.forEach(function (c) { var o = document.createElement("option"); o.value = o.textContent = c; sel.appendChild(o); });
+        sel.value = row.category;
+        sel.addEventListener("change", function () { row.category = sel.value; renderTape(); });
+        cs.appendChild(sel);
+        var s = cell(tr, "src-cell"), badge = document.createElement("span");
+        var isAi = row.source && row.source !== "rules";
+        badge.className = "src" + (isAi ? " ai" : ""); badge.textContent = isAi ? "AI" : "Rules";
+        badge.title = row.note || (isAi ? "Read by " + row.source : "Read with basic rules, no AI model"); s.appendChild(badge);
+      }
+      var x = cell(tr, "x-cell"), btn = document.createElement("button");
+      btn.className = "x"; btn.type = "button"; btn.textContent = "×"; btn.setAttribute("aria-label", "Remove " + row.file);
+      btn.addEventListener("click", function () { rows = rows.filter(function (r) { return r !== row; }); renderTable(); });
+      x.appendChild(btn); tb.appendChild(tr);
+    });
+    var has = rows.length > 0;
+    $("hint").hidden = has; $("tableWrap").hidden = !has; $("note").hidden = !has;
+    var good = rows.some(function (r) { return !r.error; });
+    $("csv").disabled = !good; $("zip").disabled = !good; $("clear").disabled = !has;
+    renderTape();
+  }
+
+  function line(parent, label, value, cls) {
+    var d = document.createElement("div"); d.className = "line " + (cls || "");
+    var a = document.createElement("span"); a.textContent = label;
+    var l = document.createElement("span"); l.className = "lead";
+    var v = document.createElement("span"); v.textContent = value;
+    d.appendChild(a); d.appendChild(l); d.appendChild(v); parent.appendChild(d);
+  }
+
+  function renderTape() {
+    var t = $("tape"); t.innerHTML = "";
+    var h = document.createElement("h2"); h.textContent = "TOTALS BY CATEGORY"; t.appendChild(h);
+    var good = rows.filter(function (r) { return !r.error; });
+    if (!good.length) { var e = document.createElement("div"); e.className = "empty"; e.textContent = "Nothing printed yet"; t.appendChild(e); return; }
+    var byCur = {};
+    good.forEach(function (r) {
+      var c = (r.currency || "?").toUpperCase();
+      byCur[c] = byCur[c] || {}; byCur[c][r.category] = (byCur[c][r.category] || 0) + (Number(r.total) || 0);
+    });
+    Object.keys(byCur).forEach(function (cur) {
+      var head = document.createElement("div"); head.className = "cur"; head.textContent = cur; t.appendChild(head);
+      var sum = 0;
+      Object.keys(byCur[cur]).sort().forEach(function (c) { sum += byCur[cur][c]; line(t, c, fmt(byCur[cur][c])); });
+      line(t, "Total", fmt(sum), "sum");
+    });
+  }
+
+  /* ---------- downloads ---------- */
+  function save(blob, name) {
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+  function q(v) { v = String(v == null ? "" : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  $("csv").addEventListener("click", function () {
+    var out = ["file,vendor,date,total,currency,category"];
+    rows.filter(function (r) { return !r.error; }).forEach(function (r) {
+      out.push([r.file, r.vendor, r.date, r.total, r.currency, r.category].map(q).join(","));
+    });
+    save(new Blob([out.join("\n") + "\n"], { type: "text/csv" }), "receipts.csv");
+  });
+  $("zip").addEventListener("click", function () {
+    var good = rows.filter(function (r) { return !r.error; });
+    fetch("/api/zip", { method: "POST", body: JSON.stringify({ rows: good }) })
+      .then(function (r) { return r.blob(); }).then(function (b) { save(b, "sorted-receipts.zip"); });
+  });
+  $("clear").addEventListener("click", function () {
+    rows = []; $("progress").textContent = ""; fetch("/api/reset", { method: "POST" }); renderTable();
+  });
+
+  /* ---------- inputs ---------- */
+  var drop = $("drop");
+  $("file").addEventListener("change", function (e) { processFiles(e.target.files); e.target.value = ""; });
+  ["dragenter", "dragover"].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function (e) { processFiles(e.dataTransfer.files); });
+  $("sample").addEventListener("click", function () {
+    fetch("/api/samples").then(function (r) { return r.json(); }).then(function (items) {
+      processFiles(items.map(function (s) { return new File([s.text], s.name, { type: "text/plain" }); }));
+    });
+  });
+  $("recheck").addEventListener("click", checkStatus);
+
+  checkStatus(); renderTable();
+})();
+</script>
+</body>
+</html>

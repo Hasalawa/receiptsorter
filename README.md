@@ -3,7 +3,17 @@
 Sort freelancer receipts and invoices into a clean CSV and category folders, **entirely on your own machine**.
 A local open-weight model (via [Ollama](https://ollama.com)) reads each receipt and extracts vendor, date, total, currency and expense category. No cloud API, no client data leaving your laptop.
 
-## Quick start
+## Web app (easiest)
+
+```bash
+python3 webapp.py
+```
+
+Opens `http://127.0.0.1:8765` in your browser. Drag receipts in (or click **Try sample receipts**), fix anything the model got wrong, then download the CSV or a ZIP sorted into category folders. The server only listens on your own computer and works offline.
+
+![ReceiptSorter web UI](docs/screenshot.png)
+
+## Command line
 
 ```bash
 # 1. Install Ollama and pull an open-weight model
@@ -15,7 +25,7 @@ python3 receiptsorter.py ./my_receipts --out sorted --move-files
 
 Output: `sorted/receipts.csv`, category folders with renamed copies (`2026-10-01_Tech-Mart_24990.0.pdf`), and a per-category total in the terminal.
 
-## Options
+### CLI options
 
 | Flag | Meaning |
 |------|---------|
