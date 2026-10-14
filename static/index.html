@@ -60,6 +60,8 @@ h1 { font: 600 clamp(28px, 4.6vw, 44px)/1.05 var(--serif); letter-spacing: -0.01
 .opts { margin-top: 16px; display: grid; gap: 10px; font-size: 14px; }
 .opts label { display: flex; align-items: center; gap: 8px; }
 .opts select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.tip { margin: 0; font-size: 13px; color: var(--muted); border-left: 3px solid var(--stamp); padding-left: 10px; }
+.tip code { font-family: var(--mono); font-size: 12px; background: var(--paper); padding: 1px 5px; border-radius: 3px; user-select: all; }
 .privacy { margin-top: 16px; font-size: 14px; color: var(--muted); border-left: 3px solid var(--ledger); padding-left: 12px; }
 
 .progress { margin-top: 12px; font-size: 14px; color: var(--muted); min-height: 21px; }
@@ -142,6 +144,8 @@ td.num input { text-align: right; font-variant-numeric: tabular-nums; }
       <div class="opts">
         <label><input type="checkbox" id="useAi" checked> Read with the AI model</label>
         <label>Model <select id="model"></select></label>
+        <label>Photos <select id="vmodel"></select></label>
+        <p class="tip" id="vhint" hidden></p>
       </div>
       <p class="privacy">Everything stays on this computer. Nothing is uploaded, and it works without internet.</p>
 
@@ -179,22 +183,36 @@ td.num input { text-align: right; font-variant-numeric: tabular-nums; }
   function fmt(n) { return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
   /* ---------- status ---------- */
+  var VISION_RE = /vl|vision|llava|minicpm|gemma3|moondream/i;
+  function fill(sel, names, preferred) {
+    sel.innerHTML = "";
+    names.forEach(function (m) { var o = document.createElement("option"); o.value = o.textContent = m; sel.appendChild(o); });
+    sel.value = names.indexOf(preferred) >= 0 ? preferred : names[0];
+  }
   function checkStatus() {
     return fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
       online = s.online; CATS = s.categories || CATS; defaultModel = s.default_model;
-      var box = $("status");
-      box.className = "status" + (online ? " ok" : "");
-      var sel = $("model"); sel.innerHTML = "";
-      var names = s.models.slice();
-      if (names.indexOf(defaultModel) < 0) names.unshift(defaultModel);
-      names.forEach(function (m) { var o = document.createElement("option"); o.value = o.textContent = m; sel.appendChild(o); });
+      $("status").className = "status" + (online ? " ok" : "");
+      var text = s.models.slice();
+      if (text.indexOf(defaultModel) < 0) text.unshift(defaultModel);
+      fill($("model"), text, defaultModel);
+      var vision = s.models.filter(function (m) { return VISION_RE.test(m); });
+      var haveVision = vision.length > 0;
+      if (!haveVision) vision = [s.default_vision_model];
+      fill($("vmodel"), vision, s.default_vision_model);
       if (online) {
         var have = s.models.indexOf(defaultModel) >= 0;
         $("statusText").textContent = have ? "Local model ready" : "Ollama is running, but " + defaultModel + " isn't installed";
-        if (!have && s.models.length) sel.value = s.models[0];
+        if (!have && s.models.length) $("model").value = s.models[0];
       } else {
         $("statusText").textContent = "Ollama isn't running. Using basic rules instead.";
       }
+      var hint = $("vhint");
+      if (online && !haveVision) {
+        hint.hidden = false; hint.innerHTML = "";
+        hint.appendChild(document.createTextNode("To read photos, install a vision model once: "));
+        var c = document.createElement("code"); c.textContent = "ollama pull " + s.default_vision_model; hint.appendChild(c);
+      } else { hint.hidden = true; }
       $("useAi").disabled = !online;
       if (!online) $("useAi").checked = false;
     }).catch(function () { $("statusText").textContent = "Can't reach the app server."; });
@@ -208,13 +226,18 @@ td.num input { text-align: right; font-variant-numeric: tabular-nums; }
     bar.className = "bar"; bar.innerHTML = "<i></i>";
     var p = $("progress");
     function step() {
-      if (done >= files.length) { p.textContent = "Done. " + files.length + (files.length === 1 ? " file" : " files") + " sorted."; return; }
+      if (done >= files.length) {
+        var bad = rows.slice(-files.length).filter(function (r) { return r.error; }).length;
+        p.textContent = "Done. " + (files.length - bad) + " sorted" + (bad ? ", " + bad + " couldn't be read (see the table)." : ".");
+        return;
+      }
       p.textContent = "Reading " + (done + 1) + " of " + files.length + ": " + files[done].name;
+      if (/\.(png|jpe?g|webp)$/i.test(files[done].name) && $("useAi").checked) p.textContent += " (photos can take a minute)";
       p.appendChild(bar); bar.firstChild.style.width = (done / files.length * 100) + "%";
       var f = files[done];
       fetch("/api/extract", {
         method: "POST",
-        headers: { "X-Filename": encodeURIComponent(f.name), "X-Model": encodeURIComponent($("model").value), "X-Use-Llm": $("useAi").checked ? "1" : "0" },
+        headers: { "X-Filename": encodeURIComponent(f.name), "X-Model": encodeURIComponent($("model").value), "X-Vision-Model": encodeURIComponent($("vmodel").value), "X-Use-Llm": $("useAi").checked ? "1" : "0" },
         body: f
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (d.error) d = { error: d.error, file: f.name, id: "e" + Math.random().toString(36).slice(2) };
