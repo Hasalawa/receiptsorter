@@ -68,8 +68,8 @@ def read_text(path: Path) -> str:
                                       capture_output=True, text=True).stdout
             return ""
         if ext in IMAGE_EXTS:
-            import pytesseract
-            from PIL import Image
+            import pytesseract  # type: ignore  # optional OCR fallback
+            from PIL import Image  # type: ignore  # optional
             return pytesseract.image_to_string(Image.open(path))
     except Exception:
         return ""
@@ -79,7 +79,7 @@ def read_text(path: Path) -> str:
 def shrink_image(data: bytes, max_side: int = 1600) -> bytes:
     """Fix phone-photo rotation and downscale so a CPU vision model stays quick."""
     try:
-        from PIL import Image, ImageOps
+        from PIL import Image, ImageOps  # type: ignore  # optional
         im = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
         if max(im.size) <= max_side and im.format in ("JPEG", "PNG"):
             return data
