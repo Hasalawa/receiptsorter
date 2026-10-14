@@ -66,7 +66,7 @@ class CliTests(unittest.TestCase):
             r = self.run_cli(str(SAMPLES), "--host", "http://127.0.0.1:1", "--out", tmp)
             self.assertEqual(r.returncode, 0, r.stderr)
             rows = list(csv.DictReader(open(Path(tmp) / "receipts.csv")))
-            self.assertTrue(all(x["source"] == "regex" for x in rows))
+            self.assertTrue(all(x["source"] == "rules" for x in rows))
 
 
 class LlmPathTests(unittest.TestCase):
